@@ -131,3 +131,7 @@ dmypy.json
 .idea/
 
 mydata
+
+cache
+
+output_sft-qwen-v1

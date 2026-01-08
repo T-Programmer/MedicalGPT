@@ -1,27 +1,27 @@
 CUDA_VISIBLE_DEVICES=0 torchrun --nproc_per_node 1 supervised_finetuning.py \
     --model_name_or_path Qwen/Qwen3-4B-Instruct-2507 \
-    --train_file_dir ./data/finetune \
-    --validation_file_dir ./data/finetune \
-    --per_device_train_batch_size 4 \
+    --train_file_dir ./mydata/sharegpt_medical/finetune/train \
+    --validation_file_dir ./mydata/sharegpt_medical/finetune/valid \
+    --per_device_train_batch_size 2 \
     --per_device_eval_batch_size 4 \
     --do_train \
     --do_eval \
     --template_name qwen \
     --use_peft True \
-    --max_train_samples 1000 \
-    --max_eval_samples 10 \
+    --max_train_samples 200000 \
+    --max_eval_samples -1 \
     --model_max_length 4096 \
-    --num_train_epochs 1 \
+    --num_train_epochs 10 \
     --learning_rate 2e-5 \
     --warmup_ratio 0.05 \
     --weight_decay 0.05 \
     --logging_strategy steps \
     --logging_steps 10 \
-    --eval_steps 50 \
+    --eval_steps 500 \
     --eval_strategy steps \
-    --save_steps 500 \
+    --save_steps 1000 \
     --save_strategy steps \
-    --save_total_limit 13 \
+    --save_total_limit 3 \
     --gradient_accumulation_steps 8 \
     --preprocessing_num_workers 4 \
     --output_dir outputs-sft-qwen-v1 \
@@ -29,8 +29,8 @@ CUDA_VISIBLE_DEVICES=0 torchrun --nproc_per_node 1 supervised_finetuning.py \
     --ddp_timeout 30000 \
     --logging_first_step True \
     --target_modules all \
-    --lora_rank 8 \
-    --lora_alpha 16 \
+    --lora_rank 16 \
+    --lora_alpha 32 \
     --lora_dropout 0.05 \
     --torch_dtype bfloat16 \
     --bf16 \
