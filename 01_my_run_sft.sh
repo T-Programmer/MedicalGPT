@@ -2,29 +2,29 @@ CUDA_VISIBLE_DEVICES=0 torchrun --nproc_per_node 1 supervised_finetuning.py \
     --model_name_or_path Qwen/Qwen3-4B-Instruct-2507 \
     --train_file_dir ./mydata/sharegpt_medical/finetune/train \
     --validation_file_dir ./mydata/sharegpt_medical/finetune/valid \
-    --per_device_train_batch_size 2 \
-    --per_device_eval_batch_size 4 \
+    --per_device_train_batch_size 1 \
+    --per_device_eval_batch_size 2 \
     --do_train \
     --do_eval \
     --template_name qwen \
     --use_peft True \
     --max_train_samples 200000 \
-    --max_eval_samples -1 \
-    --model_max_length 4096 \
-    --num_train_epochs 10 \
+    --max_eval_samples 50 \
+    --model_max_length 2048 \
+    --num_train_epochs 3 \
     --learning_rate 2e-5 \
     --warmup_ratio 0.05 \
     --weight_decay 0.05 \
     --logging_strategy steps \
     --logging_steps 10 \
-    --eval_steps 500 \
+    --eval_steps 1000 \
     --eval_strategy steps \
     --save_steps 1000 \
     --save_strategy steps \
     --save_total_limit 3 \
-    --gradient_accumulation_steps 8 \
+    --gradient_accumulation_steps 16 \
     --preprocessing_num_workers 4 \
-    --output_dir outputs-sft-qwen-v1 \
+    --output_dir output/outputs-sft-qwen4BInstruct-v1 \
     --overwrite_output_dir \
     --ddp_timeout 30000 \
     --logging_first_step True \
@@ -38,4 +38,5 @@ CUDA_VISIBLE_DEVICES=0 torchrun --nproc_per_node 1 supervised_finetuning.py \
     --report_to tensorboard \
     --ddp_find_unused_parameters False \
     --gradient_checkpointing True \
-    --cache_dir ./cache --flash_attn True
+    --cache_dir ./cache \
+    --flash_attn True
