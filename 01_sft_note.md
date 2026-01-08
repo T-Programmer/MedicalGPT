@@ -55,3 +55,56 @@
   ]
 }
 ```
+
+
+# 数据集转换
+
+## 中文数据集
+
+```bash
+# 中文训练集 (1,949,972 条)
+python convert_dataset.py \
+  --in_file mydata/medical/finetune/train_zh_0.json \
+  --out_file mydata/medical/finetune/train_zh_0_sharegpt.jsonl \
+  --data_type alpaca \
+  --file_type json
+
+# 中文验证集
+python convert_dataset.py \
+  --in_file mydata/medical/finetune/valid_zh_0.json \
+  --out_file mydata/medical/finetune/valid_zh_0_sharegpt.jsonl \
+  --data_type alpaca \
+  --file_type json
+
+# 中文测试集
+python convert_dataset.py \
+  --in_file mydata/medical/finetune/test_zh_0.json \
+  --out_file mydata/medical/finetune/test_zh_0_sharegpt.jsonl \
+  --data_type alpaca \
+  --file_type json
+```
+
+## 英文数据集
+
+```bash
+# 英文训练集 (116,617 条)
+python convert_dataset.py \
+  --in_file mydata/medical/finetune/train_en_1.json \
+  --out_file mydata/medical/finetune/train_en_1_sharegpt.jsonl \
+  --data_type alpaca \
+  --file_type json
+
+# 英文验证集
+python convert_dataset.py \
+  --in_file mydata/medical/finetune/valid_en_1.json \
+  --out_file mydata/medical/finetune/valid_en_1_sharegpt.jsonl \
+  --data_type alpaca \
+  --file_type json
+
+# 英文测试集
+python convert_dataset.py \
+  --in_file mydata/medical/finetune/test_en_1.json \
+  --out_file mydata/medical/finetune/test_en_1_sharegpt.jsonl \
+  --data_type alpaca \
+  --file_type json
+```
