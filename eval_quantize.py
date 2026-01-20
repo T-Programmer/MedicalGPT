@@ -26,6 +26,11 @@ parser.add_argument(
     required=True,  # 设置为必须的参数
     help="jsonl数据集路径。"
 )
+parser.add_argument(
+    "--use_4bit",
+    action="store_true",
+    help="是否使用4-bit量化加载模型。"
+)
 
 
 # 设备选择函数
@@ -67,42 +72,75 @@ def load_jsonl_data(file_path):
 
 # 困惑度评估函数
 def evaluate_perplexity(model, tokenizer, conversation_pairs):
-    def _perplexity(nlls, n_samples, seqlen):
+    def _perplexity(nlls, total_tokens):
         try:
-            return torch.exp(torch.stack(nlls).sum() / (n_samples * seqlen))
+            return torch.exp(torch.stack(nlls).sum() / total_tokens)
         except Exception as e:
             logger.error(f"Error calculating perplexity: {e}")
             return float('inf')
 
     model = model.eval()
     nlls = []
+    total_tokens = 0
     # 获取设备
     device = get_device()
 
     # 确保 tokenizer 和 model 使用相同的设备
     model = model.to(device)
+
+    # 确保 pad_token 存在，如果不存在则使用 eos_token
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+        
     # 遍历每个对话，基于 human 部分生成并与 gpt 部分计算困惑度
     for input_text, target_text in tqdm(conversation_pairs, desc="Perplexity Evaluation"):
-        # Tokenize input and target
-        inputs = tokenizer(input_text, return_tensors="pt", padding='max_length', truncation=True,
-                           max_length=512).input_ids.to(get_device())
-        target_ids = tokenizer(target_text, return_tensors="pt", padding='max_length', truncation=True,
-                               max_length=512).input_ids.to(get_device())
-
-        # Ensure both inputs and target have the same length
-        if inputs.size(1) != target_ids.size(1):
-            logger.warning(f"Input length {inputs.size(1)} and Target length {target_ids.size(1)} are not equal.")
+        # 构建输入：Prompt + Answer
+        # 为了计算 PPL，我们需要计算 p(Answer | Prompt)
+        # 这里的做法是将 Prompt 和 Answer 拼接，然后 Mask 掉 Prompt 部分的 Loss
+        
+        # 为了避免粘连，中间加个换行符（视具体模型习惯而定，通用做法加个分隔）
+        prompt_text = input_text + "\n"
+        
+        # 分别编码
+        prompt_ids = tokenizer.encode(prompt_text, add_special_tokens=False)
+        target_ids = tokenizer.encode(target_text, add_special_tokens=False)
+        
+        # 拼接 Input IDs
+        # 结尾加上 EOS token
+        input_ids = prompt_ids + target_ids + [tokenizer.eos_token_id]
+        
+        # 构建 Labels
+        # Prompt 部分设为 -100 (忽略 Loss)，Answer 部分保留原值
+        labels = [-100] * len(prompt_ids) + target_ids + [tokenizer.eos_token_id]
+        
+        # 截断处理
+        max_len = 512
+        if len(input_ids) > max_len:
+            # 如果过长，从左侧截断（通常保留最新的上下文和完整的回答）
+            # 但要注意 labels 和 input_ids 必须同步截断
+            input_ids = input_ids[-max_len:]
+            labels = labels[-max_len:]
+        
+        # 转为 Tensor
+        input_tensor = torch.tensor([input_ids]).to(device)
+        labels_tensor = torch.tensor([labels]).to(device)
 
         # Forward pass
         with torch.no_grad():
-            outputs = model(input_ids=inputs, labels=target_ids)
+            # Causal LM 会自动处理 shift，labels 应该与 input_ids 对齐
+            outputs = model(input_ids=input_tensor, labels=labels_tensor)
             loss = outputs.loss
-            nlls.append(loss * target_ids.size(1))  # loss * sequence length
+            
+            # outputs.loss 是标量（平均 Loss），需要还原为 Sum
+            # 计算有效的 Token 数量 (label != -100)
+            valid_len = (labels_tensor != -100).sum().item()
+            
+            if valid_len > 0:
+                nlls.append(loss * valid_len)
+                total_tokens += valid_len
 
     # 计算最终困惑度
-    total_samples = len(conversation_pairs)
-    total_length = sum([len(pair[1]) for pair in conversation_pairs])
-    ppl = _perplexity(nlls, total_samples, total_length)
+    ppl = _perplexity(nlls, total_tokens)
     logger.info(f"Final Perplexity: {ppl:.3f}")
 
     return ppl.item()
@@ -118,18 +156,19 @@ if __name__ == "__main__":
 
     try:
         # 设置BNB量化配置
-        from accelerate.utils import BnbQuantizationConfig
+        quantization_config = None
+        if args.use_4bit:
+            from accelerate.utils import BnbQuantizationConfig
+            quantization_config = BnbQuantizationConfig(
+                load_in_4bit=True,
+                bnb_4bit_compute_dtype=torch.bfloat16,
+                bnb_4bit_use_double_quant=True,
+                bnb_4bit_quant_type="nf4"
+            )
 
-        bnb_quantization_config = BnbQuantizationConfig(
-            load_in_4bit=True,
-            bnb_4bit_compute_dtype=torch.bfloat16,
-            bnb_4bit_use_double_quant=True,
-            bnb_4bit_quant_type="nf4"
-        )
-
-        logger.info(f"Loading BNB model from: {args.bnb_path}")
-        tokenizer = AutoTokenizer.from_pretrained(args.bnb_path, use_fast=True)
-        model = AutoModelForCausalLM.from_pretrained(args.bnb_path, trust_remote_code=True)
+        logger.info(f"Loading model from: {args.bnb_path} (4-bit: {args.use_4bit})")
+        tokenizer = AutoTokenizer.from_pretrained(args.bnb_path, use_fast=True, fix_mistral_regex=True)
+        model = AutoModelForCausalLM.from_pretrained(args.bnb_path, trust_remote_code=True, quantization_config=quantization_config)
 
         # 加载jsonl数据
         conversation_pairs = load_jsonl_data(args.data_path)
